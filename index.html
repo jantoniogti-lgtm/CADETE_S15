@@ -10027,5 +10027,73 @@ body{padding-bottom:0!important}
 })();
 </script>
 
+
+<script id="rs-goal-player-poster-v1">
+(function(){
+  const oldShareLastEvent=window.rsShareLastEvent;
+  function load(src){return new Promise(resolve=>{if(!src)return resolve(null);const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>resolve(null);im.src=src;});}
+  function fit(ctx,text,x,y,max,size,weight='900'){
+    ctx.font=`${weight} ${size}px Arial`;let t=String(text||'');while(t.length>2&&ctx.measureText(t).width>max)t=t.slice(0,-1);ctx.fillText(t,x,y);
+  }
+  async function makeGoalPoster(m,e,p){
+    const W=1080,H=1350,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+    const g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,'#050b15');g.addColorStop(.55,'#102b43');g.addColorStop(1,'#050b15');x.fillStyle=g;x.fillRect(0,0,W,H);
+    x.fillStyle='#ffd400';x.fillRect(0,0,W,14);x.fillStyle='#e21d2f';x.fillRect(0,H-14,W,14);
+    // Stadium lights and subtle diagonal accents
+    for(let i=0;i<9;i++){x.fillStyle=`rgba(255,212,0,${.025+i*.003})`;x.beginPath();x.moveTo(i*150,0);x.lineTo(i*150+260,0);x.lineTo(i*150-260,H);x.lineTo(i*150-520,H);x.closePath();x.fill();}
+    x.textAlign='center';x.fillStyle='#fff';x.font='900 30px Arial';x.fillText('RS LIVE  ·  RAMÓN SICART',W/2,70);
+    x.fillStyle='#ffd400';x.font='1000 94px Arial';x.fillText('GOOLLLLL!',W/2,180);
+    x.fillStyle='#fff';x.font='800 26px Arial';fit(x,p.name||e.playerName,W/2,230,900,26); // centered below
+    const photo=await load(p.photo||p.foto||p.image||p.imagen||p.photoUrl||p.imageUrl||p.avatar||'');
+    if(photo){
+      const box={x:170,y:270,w:740,h:610};
+      // Mostrar la foto completa: usar contain en vez de cover para no cortar la cara.
+      x.save();x.beginPath();x.roundRect(box.x,box.y,box.w,box.h,28);x.clip();
+      x.fillStyle='#12263a';x.fillRect(box.x,box.y,box.w,box.h);
+      const scale=Math.min(box.w/photo.width,box.h/photo.height),w=photo.width*scale,h=photo.height*scale;
+      const px=box.x+(box.w-w)/2;
+      // Si queda espacio vertical, alinear arriba para priorizar la cara.
+      const py=box.y+Math.max(0,(box.h-h)*0.12);
+      x.drawImage(photo,px,py,w,h);x.restore();
+      x.strokeStyle='#ffd400';x.lineWidth=5;x.beginPath();x.roundRect(box.x,box.y,box.w,box.h,28);x.stroke();
+    } else {
+      x.fillStyle='#12263a';x.beginPath();x.roundRect(170,270,740,610,28);x.fill();
+      x.fillStyle='#ffd400';x.font='1000 190px Arial';x.fillText(String(p.number??''),W/2,590);
+      x.fillStyle='#b8c6d5';x.font='700 24px Arial';x.fillText('FOTO DEL JUGADOR NO DISPONIBLE',W/2,680);
+    }
+    const home=(typeof team==='function'?team(m.home):null)||{},away=(typeof team==='function'?team(m.away):null)||{};
+    x.fillStyle='#fff';x.font='900 27px Arial';fit(x,home.name||'LOCAL',W/2,940,360,27);x.fillStyle='#ffd400';x.font='1000 72px Arial';x.fillText(e.score||`${m.homeScore||0}-${m.awayScore||0}`,W/2,1030);
+    x.fillStyle='#fff';x.font='900 27px Arial';fit(x,away.name||'VISITANTE',W/2,1080,360,27);
+    x.fillStyle='#ffd400';x.font='1000 42px Arial';x.fillText(`MINUTO ${e.minute||0}'`,W/2,1160);
+    x.fillStyle='#c8d4e2';x.font='700 18px Arial';x.fillText('TEMPORADA 2026/27  •  FÚTBOL EN DIRECTO',W/2,1240);
+    return c.toDataURL('image/png');
+  }
+  window.rsShareLastEvent=async function(e){
+    if(typeof oldShareLastEvent==='function') await oldShareLastEvent(e);
+    try{
+      if(!e||e.type!=='goal')return;
+      const m=typeof activeMatch==='function'?activeMatch():null;if(!m)return;
+      const isRSHome=Number(m.home)===1,rsGoal=(e.team==='home')===isRSHome;
+      if(!rsGoal)return; // Solo goles del Ramón Sicart
+      const appData=(typeof App!=='undefined' && App) ? App : (window.App||{});
+      const roster=Array.isArray(appData.players)?appData.players:[];
+      const evNum=e.playerNumber??e.number??e.playerDorsal??e.dorsal;
+      const evName=String(e.playerName||e.name||'').trim().toLocaleLowerCase('es');
+      const p=roster.find(q=>evNum!=null && Number(q.number)===Number(evNum))
+        || roster.find(q=>e.playerId!=null && String(q.id)===String(e.playerId))
+        || roster.find(q=>String((q.name||'')+' '+(q.surname||'')).trim().toLocaleLowerCase('es')===evName)
+        || roster.find(q=>String(q.name||'').trim().toLocaleLowerCase('es')===evName)
+        || {name:e.playerName,number:evNum,photo:''};
+      const url=await makeGoalPoster(m,e,p);
+      const modal=document.getElementById('rsShareModal');if(!modal)return;
+      let section=document.getElementById('rsGoalPosterExtraV1');
+      if(!section){section=document.createElement('div');section.id='rsGoalPosterExtraV1';section.style.cssText='margin-top:16px;padding-top:14px;border-top:1px solid #29405d;color:#fff';const preview=document.getElementById('rsSharePreview');preview?.insertAdjacentElement('afterend',section);}
+      section.innerHTML=`<h3 style="margin:0 0 10px;color:#ffd400">⚽ PÓSTER PROFESIONAL DEL GOLEADOR</h3><img src="${url}" alt="Póster del gol" style="display:block;width:100%;max-width:420px;margin:0 auto 12px;border-radius:14px;border:1px solid #29405d"><button type="button" id="rsDownloadGoalPosterV1" class="btn" style="width:100%">⬇️ Descargar póster del gol</button>`;
+      document.getElementById('rsDownloadGoalPosterV1').onclick=()=>{const a=document.createElement('a');a.href=url;a.download=`gol-${String(p.name||'ramon-sicart').toLowerCase().replace(/[^a-z0-9]+/g,'-')}-${e.minute||0}min.png`;a.click();};
+    }catch(err){console.error('Póster profesional del gol',err);}
+  };
+})();
+</script>
+
 </body>
 </html>
