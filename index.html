@@ -10095,5 +10095,94 @@ body{padding-bottom:0!important}
 })();
 </script>
 
+
+
+<!-- RS LIVE · Control de convocatorias y partidos no convocado -->
+<style id="rs-not-called-v1-css">
+.rsConvocationV1{margin:12px 0 14px;padding:13px;border:1px solid rgba(255,212,0,.42);border-radius:14px;background:#091727}
+.rsConvocationV1 h3{margin:0 0 5px;color:#ffd400;font-size:13px;font-weight:1000}
+.rsConvocationV1 p{margin:0 0 10px;color:#8fa3b8;font-size:10px;line-height:1.45}
+.rsConvocationGridV1{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.rsConvocationPlayerV1{display:flex;align-items:center;gap:7px;padding:8px;border:1px solid #203854;border-radius:9px;background:#0e2034;color:#fff;font-size:11px;font-weight:800;min-width:0}
+.rsConvocationPlayerV1 input{accent-color:#ffd400;width:16px;height:16px;flex:0 0 auto}
+.rsConvocationPlayerV1 small{display:block;color:#f1b5bd;font-size:9px;margin-top:2px}
+.rsConvocationCountV1{font-size:10px;color:#b9c7d8;margin-bottom:9px;font-weight:900}
+.rsNoCalledStatV1{background:#38202a!important;border-color:#743141!important;color:#ffd5db!important}
+@media(max-width:520px){.rsConvocationGridV1{grid-template-columns:1fr}}
+</style>
+<script id="rs-not-called-v1-js">
+(function(){
+  'use strict';
+  const oldAdminXI=window.renderAdminXI10 || (typeof renderAdminXI10==='function'?renderAdminXI10:null);
+  const oldPublicXI=window.renderPublicTeamV11 || (typeof renderPublicTeamV11==='function'?renderPublicTeamV11:null);
+  const oldLineupChecks=window.renderLineupChecks || (typeof renderLineupChecks==='function'?renderLineupChecks:null);
+  const oldPlayers=window.renderPlayers || (typeof renderPlayers==='function'?renderPlayers:null);
+  const oldRenderAll=window.renderAll || (typeof renderAll==='function'?renderAll:null);
+
+  function active(){return typeof activeMatch==='function'?activeMatch():((App.matches||[]).find(m=>String(m.id)===String(App.activeMatch))||null)}
+  function numbersFor(m){return new Set((Array.isArray(m&&m.notCalled)?m.notCalled:[]).map(Number))}
+  function noCalledSet(){return numbersFor(active())}
+  function isRSMatch(m){return !!m && (Number(m.home)===1 || Number(m.away)===1)}
+  function countNoCalled(n){return (App.matches||[]).filter(m=>isRSMatch(m)&&numbersFor(m).has(Number(n))).length}
+  function normalizeXI(){
+    const m=active();if(!m)return;
+    const nc=numbersFor(m);
+    App.lineup=App.lineup||{formation:'4-3-3',players:[]};
+    const before=(App.lineup.players||[]).map(Number);
+    const after=before.filter(n=>!nc.has(n));
+    if(after.length!==before.length){App.lineup.players=after;Live.lineup=after.slice();try{localStorage.setItem('rs_lineup',JSON.stringify({formation:App.lineup.formation||'4-3-3',players:after}))}catch(e){}}
+  }
+  function ensurePanel(){
+    const root=document.getElementById('adminLineupV10');if(!root)return;
+    let panel=document.getElementById('rsConvocationV1');
+    if(!panel){
+      panel=document.createElement('div');panel.id='rsConvocationV1';panel.className='rsConvocationV1';
+      const title=root.querySelector('h2');
+      if(title)title.insertAdjacentElement('afterend',panel);else root.prepend(panel);
+    }
+    const m=active();
+    if(!m){panel.innerHTML='<h3>📋 Convocatoria del partido</h3><p>Activa un partido para gestionar los jugadores no convocados.</p>';return}
+    if(!Array.isArray(m.notCalled))m.notCalled=[];
+    const nc=numbersFor(m),players=(App.players||[]).slice().sort((a,b)=>Number(a.number)-Number(b.number));
+    const called=players.length-nc.size;
+    panel.innerHTML=`<h3>📋 Convocatoria del partido</h3><p>Marca «No convocado» para excluir al jugador de la lista de convocados, del banquillo y de las opciones de alineación de <b>${esc(team(m.home).name)} vs ${esc(team(m.away).name)}</b>. Se guarda por partido y se sincroniza con Firebase.</p><div class="rsConvocationCountV1">${called} convocados · ${nc.size} no convocados</div><div class="rsConvocationGridV1">${players.map(p=>`<label class="rsConvocationPlayerV1"><input type="checkbox" data-rs-no-called="${Number(p.number)}" ${nc.has(Number(p.number))?'checked':''}><span><b>#${Number(p.number)} ${esc(p.name)}</b>${nc.has(Number(p.number))?'<small>NO CONVOCADO</small>':''}</span></label>`).join('')}</div>`;
+    panel.querySelectorAll('[data-rs-no-called]').forEach(ch=>ch.addEventListener('change',async()=>{
+      const n=Number(ch.getAttribute('data-rs-no-called'));const match=active();if(!match)return;
+      if(!Array.isArray(match.notCalled))match.notCalled=[];
+      const set=numbersFor(match);
+      if(ch.checked)set.add(n);else set.delete(n);
+      match.notCalled=Array.from(set).sort((a,b)=>a-b);
+      normalizeXI();
+      try{await save();}catch(e){}
+      renderAll();
+      try{renderAdminXI10()}catch(e){}
+      try{renderPublicTeamV11()}catch(e){}
+      toast(ch.checked?'Jugador marcado como no convocado':'Jugador vuelve a estar convocado');
+    }));
+  }
+  function filterAdminAvailable(){
+    const m=active();const nc=numbersFor(m);
+    document.querySelectorAll('#availV10 button').forEach(btn=>{
+      const match=(btn.textContent||'').match(/#\s*(\d+)/);if(!match)return;
+      const n=Number(match[1]);
+      if(nc.has(n))btn.remove();
+    });
+    // The checkbox panel is the place to re-include a non-convoked player.
+    ensurePanel();
+  }
+  if(oldAdminXI){window.renderAdminXI10=function(){normalizeXI();oldAdminXI();filterAdminAvailable();};}
+  if(oldPublicXI){window.renderPublicTeamV11=function(){normalizeXI();oldPublicXI();const nc=noCalledSet();const bench=document.getElementById('publicBenchV11');if(bench){bench.querySelectorAll('.benchPlayerV11').forEach(el=>{const num=el.querySelector('.benchShirtV11')?.textContent; if(num!=null&&nc.has(Number(num)))el.remove();});}const caption=document.getElementById('publicFormationV11');if(caption&&active())caption.textContent=(App.lineup?.formation||'4-3-3')+' · '+(App.lineup?.players||[]).filter(n=>!nc.has(Number(n))).length+'/11 titulares';};}
+  if(oldLineupChecks){window.renderLineupChecks=function(){oldLineupChecks();const nc=noCalledSet();document.querySelectorAll('#lineupChecks input[type="checkbox"]').forEach(ch=>{if(nc.has(Number(ch.value))){ch.checked=false;ch.disabled=true;const label=ch.closest('label');if(label){label.style.opacity='.4';label.title='Jugador no convocado en este partido';}}});};}
+  if(oldPlayers){window.renderPlayers=function(){oldPlayers();document.querySelectorAll('#players .playerCard').forEach(card=>{const numEl=card.querySelector('.playerNumber');if(!numEl)return;const p=(App.players||[]).find(x=>Number(x.number)===Number(numEl.textContent));if(!p)return;const stat=card.querySelector('.v26PlayerStats');if(stat&&!stat.querySelector('.rsNoCalledStatV1'))stat.insertAdjacentHTML('beforeend',`<span class="v26Stat rsNoCalledStatV1">🚫 ${countNoCalled(p.number)} no convocado</span>`);});};}
+  // Refresh the card when the active match or Firebase data changes.
+  if(oldRenderAll){window.renderAll=function(){normalizeXI();oldRenderAll();try{ensurePanel();filterAdminAvailable();}catch(e){console.warn('Convocatoria RS LIVE',e)}};}
+  document.addEventListener('click',function(e){
+    const b=e.target.closest('#clearXI10');if(b){setTimeout(()=>{try{renderAdminXI10();renderPublicTeamV11()}catch(err){}},0)}
+  });
+  // The original functions are declared globally; this first refresh is safe after script load.
+  setTimeout(()=>{try{normalizeXI();ensurePanel();renderAdminXI10();renderPublicTeamV11();renderPlayers()}catch(e){console.warn(e)}},250);
+})();
+</script>
+
 </body>
 </html>
